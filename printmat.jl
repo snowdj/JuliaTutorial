@@ -1,41 +1,46 @@
 #------------------------------------------------------------------------------
 """
-    printmat([fh::IO],x,width=10,prec=3,NoPrinting=false,htmlQ=false)
+    printmat([fh::IO],x;width=10,prec=3,NoPrinting=false,htmlQ=false)
 
-Prints all elements of matrix with a predefined formatting.
+Print all elements of matrix with predefined formatting.
 
 # Input
 - `fh::IO`:           (optional) file handle. If not supplied, prints to screen
 - `x::Array`:         string, date or array to print
-- `width::Int`:       (optional) scalar, width of printed cells. [10]
-- `prec::Int`:        (optional) scalar, precision of printed cells. []
-- `NoPrinting::Bool`: (optional) bool, true: no printing, just return formatted string
-- `hmtlQ::Bool`:      (optional) bool, true: format as htmlQ <td>cells</td>
+- `width::Int`:       (keyword) scalar, width of printed cells. [10]
+- `prec::Int`:        (keyword) scalar, precision of printed cells. [3]
+- `NoPrinting::Bool`: (keyword) bool, true: no printing, just return formatted string [false]
+- `hmtlQ::Bool`:      (keyword) bool, true: format as htmlQ <td>cells</td> [false]
 
 # Output
 - str         (if NoPrinting) string, (otherwise nothing)
+
+# Examples. Try printing the following arrays:
+- x = [11 12;21 22]
+- x = Any[1 "ab"; Date(2018,10,7) 3.14]
 
 # Uses
 - fmtNumPs
 
 # To do
-- skip input ,DateFmt="yyyy-mm-dd"?
-- sort out dispatch and keyword arguments
+- use Dict() for the options, width etc?
 
 
 Paul.Soderlind@unisg.ch
 
 """
-function printmat(fh::IO,x,width=10,prec=3,NoPrinting=false,htmlQ=false)
+function printmat(fh::IO,x;width=10,prec=3,NoPrinting=false,htmlQ=false)
 
-  if typeof(x) <: String || typeof(x) <: Union{Date,DateTime}    #strings,DateTime need special treatment
-    str = string(x,"\n")
+  if isa(x,Union{String,Date,DateTime,Missing})  #these types need special treatment
+    str = string(lpad(x,width),"\n")
     if NoPrinting
       return str
     else
       print(fh,str,"\n")
       return nothing
     end
+  elseif isa(x,Nothing)
+    return nothing
   end
 
   if ndims(x) > 2
@@ -48,11 +53,11 @@ function printmat(fh::IO,x,width=10,prec=3,NoPrinting=false,htmlQ=false)
   iob = IOBuffer()
   for i = 1:m                #loop over lines
     for j = 1:n                #loop over columns
-      if typeof(x[i,j]) <: AbstractFloat                    #Floats,NaN
+      if isa(x[i,j],AbstractFloat)        #Float
         write(iob,fmtNumPs(x[i,j],width,prec,"right",htmlQ))
-      elseif typeof(x[i,j]) <:Union{Integer,Missing}        #Signed,Unsigned,BigInt,Missing
-        write(iob,fmtNumPs(x[i,j],width,0,"right",htmlQ))
-      else
+      elseif isa(x[i,j],Nothing)           #Nothing
+        htmlQ ? write(iob,"<td>",lpad("",width),"</td>") : write(iob,lpad("",width))
+      else                                #other types (Integer,Missing,String,Date,...)
         htmlQ ? write(iob,"<td>",lpad(x[i,j],width),"</td>") : write(iob,lpad(x[i,j],width))
       end
     end
@@ -69,8 +74,8 @@ function printmat(fh::IO,x,width=10,prec=3,NoPrinting=false,htmlQ=false)
 
 end
                   #when fh is not supplied: printing to screen
-printmat(x,width=10,prec=3,NoPrinting=false,htmlQ=false) = printmat(stdout::IO,
-         x,width,prec,NoPrinting,htmlQ)
+printmat(x;width=10,prec=3,NoPrinting=false,htmlQ=false) = printmat(stdout::IO,
+         x,width=width,prec=prec,NoPrinting=NoPrinting,htmlQ=htmlQ)
 #------------------------------------------------------------------------------
 
 
@@ -79,6 +84,12 @@ printmat(x,width=10,prec=3,NoPrinting=false,htmlQ=false) = printmat(stdout::IO,
     fmtNumPs(z,width=10,prec=2,justify="right",htmlQ=false)
 
 Formats a scalar and creates a string of it.
+
+# Remark
+The Formatting.jl package provides more elegant solutions:
+fmt  = FormatSpec(string(">",width,".",prec,"f"))   #right justified, else "<"
+fmt = FormatSpec(string(">",wid,"d"))               #for Int
+str  = Formatting.fmt(fmt1,z))
 
 """
 function fmtNumPs(z,width=10,prec=2,justify="right",htmlQ=false)
@@ -148,7 +159,7 @@ Subsitute for println, with predefined formatting.
 
 The formatting can be set globally by defining a dictionary in the calling scope.
 
-Paul.Soderlind@unisg.ch, Jan 2017
+Paul.Soderlind@unisg.ch
 
 """
 function printlnPs(fh::IO,z...)
@@ -167,19 +178,18 @@ function printlnPs(fh::IO,z...)
   end
 
   for x in z                              #loop over inputs in z...
-    if typeof(x) <: String
-      print(fh,x)
-    elseif typeof(x) <: Union{Date,DateTime}
-      print(fh,rpad(x,width))
-    else
-      iob = IOBuffer()                     #opening IOBuffer
+    if isa(x,Union{String,Date,DateTime,Missing})
+      print(fh,lpad(x,width))
+    elseif isa(x,Nothing)
+      print(fh,"")
+    else                                         #other types
+      iob = IOBuffer()
       for i = 1:length(x)
-        eltype_x = eltype(x[i])
-        if eltype_x <: Union{AbstractFloat,Missing}
+        if isa(x[i],AbstractFloat)               #Float
           write(iob,fmtNumPs(x[i],width,prec,"right"))
-        elseif eltype_x <: Union{Integer,Missing}
-          write(iob,fmtNumPs(x[i],width,0,"right"))
-        else
+        elseif isa(x[i],Nothing)                 #Nothing
+          write(iob,lpad("",width))
+        else                                     #Integer, etc
           write(iob,lpad(x[i],width))
         end
       end
